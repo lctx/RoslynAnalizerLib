@@ -15,59 +15,23 @@ namespace RoslynAnalizerLib.Analizers
 
     public class Analyzer
     {
+        /// <summary>
+        /// Analiza una solución asincronicamente
+        /// </summary>
+        /// <param name="solutionPath">Path de la solución de .net</param>
+        /// <returns></returns>
         public async Task<Model.Solution> AnalyzeSolutionAsync(string solutionPath)
         {
             using (var workspace = MSBuildWorkspace.Create())
             {
+                Stopwatch stopwatch = Stopwatch.StartNew();
                 Debug.WriteLine($"Analizando {solutionPath}");
                 var roslynSolution = await workspace.OpenSolutionAsync(solutionPath);
                 var solutionData = new Model.Solution(roslynSolution);
-
-                foreach (var project in roslynSolution.Projects)
-                {
-                    //Todo: Hacerlo con Hilos para que sea mas rapido
-                    var projectData = AnalyzeProjectAsync(project, solutionData);
-                    //var projectData = await AnalyzeProjectAsyncBuild(project);
-                    await projectData.AnalizeClassesComponents();
-                    solutionData.Projects.Add(projectData);
-                }
-
+                await solutionData.AnalizeProjects();
+                stopwatch.Stop();
                 return solutionData;
             }
-        }
-        private Model.Project AnalyzeProjectAsync(Microsoft.CodeAnalysis.Project project, Model.Solution solution)
-        {
-            Debug.WriteLine($"Analizando {project.Name}");
-            var projectData = new Model.Project(project,solution);
-            projectData.AnalizeClasses();
-
-            return projectData;
-        }
-
-        /// <summary>
-        /// Analiza el proyecto pero compilandolo
-        /// </summary>
-        /// <param name="project"></param>
-        /// <returns></returns>
-        private async Task<Model.Project> AnalyzeProjectAsyncBuild(Microsoft.CodeAnalysis.Project project, Model.Solution solution)
-        {
-            Debug.WriteLine($"Analizando {project.Name}");
-            var projectData = new Model.Project(project, solution);
-            var compilation = await project.GetCompilationAsync();
-            foreach (var syntaxTree in compilation.SyntaxTrees)
-            {
-                var semanticModel = compilation.GetSemanticModel(syntaxTree);
-                var root = await syntaxTree.GetRootAsync();
-
-                var namespaceDeclarations = root.DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.NamespaceDeclarationSyntax>();
-                foreach (var namespaceDeclaration in namespaceDeclarations)
-                {
-                    var namespaceData = await AnalyzeNamespaceAsync(namespaceDeclaration, semanticModel);
-                    projectData.Namespaces.Add(namespaceData);
-                }
-            }
-
-            return projectData;
         }
 
         private async Task<Model.Namespace> AnalyzeNamespaceAsync(Microsoft.CodeAnalysis.CSharp.Syntax.NamespaceDeclarationSyntax namespaceDeclaration, SemanticModel semanticModel)
